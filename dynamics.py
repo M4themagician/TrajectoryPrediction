@@ -79,9 +79,17 @@ class SingleTrackDataset:
         trajectory_cumulative[:, 0] = trajectory[:6, 0]
         for i in range(self.input_steps + self.forecast_steps - 1):
             controls = self.get_controls(i * self.delta_t)
-            trajectory[:6, i + 1] = self.delta_t * self.singletrack_rhs(trajectory_cumulative[:, i], controls)
             trajectory_cumulative[:, i + 1] = trajectory_cumulative[:, i] + self.delta_t * self.singletrack_rhs(trajectory_cumulative[:, i], controls)
             trajectory[6:, i] = controls
+
+            if i < self.input_steps:
+                trajectory[:6, i + 1] = self.delta_t * self.singletrack_rhs(trajectory_cumulative[:, i], controls)
+                trajectory[:2, i + 1] += np.random.normal(0, 0.05, (2))
+                trajectory[3, i + 1] += np.random.normal(0, np.pi / 180)
+                trajectory[4, i + 1] += np.random.normal(0, 0.05)
+
+            else:
+                trajectory[:6, i + 1] = self.delta_t * self.singletrack_rhs(trajectory_cumulative[:, i], controls)
 
         input_trajectory = trajectory[:, : self.input_steps]
         regression_target = trajectory[:6, self.input_steps :]
@@ -107,7 +115,7 @@ def train(rank, world_size):
     device_id = rank % torch.cuda.device_count()
 
     batch_size = 1
-    print_n = 500 * batch_size
+    print_n = 5000 * batch_size
     input_steps = 150
     forecast_steps = 30
     show_predictions = False
@@ -149,7 +157,7 @@ def train(rank, world_size):
                 plt.clf()
                 plt.plot(input_x, input_y, label="input")
                 plt.plot(np.cumsum(future_gt[0, :]) + input_x[-1], np.cumsum(future_gt[1, :]) + input_y[-1], label="gt")
-                plt.plot(np.cumsum(future_predicted[0::6]) + input_x[-1], np.cumsum(future_predicted[1::6]) + input_y[-1], label="prediction")
+                plt.plot(np.cumsum(future_predicted[0, :]) + input_x[-1], np.cumsum(future_predicted[1, :]) + input_y[-1], label="prediction")
                 plt.legend()
                 # plt.axis('scaled')
                 plt.pause(0.1)
